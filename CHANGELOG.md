@@ -19,6 +19,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `composer.json` homepage and support links.
 - README, `.gitattributes`; runtime requirements now include `illuminate/notifications` and `illuminate/routing`.
 
+### Changed
+- Contract: new error codes `module_disabled` (403), `not_found` (404) and `method_not_allowed` (405), and `plan` / `plan_renews_at` in the balance may be null.
+
 ### Security
 - `Client` and `SmsManager` hide the API key from `print_r`/`var_dump`/`var_export` and refuse serialisation.
 - Redirects are never followed, so the `Authorization` header cannot reach a redirect target.

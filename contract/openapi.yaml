@@ -381,9 +381,10 @@ components:
         credits:
           type: integer
         plan:
-          type: string
+          type: [string, 'null']
+          description: Null until plans exist (portal phase 2).
         plan_renews_at:
-          type: string
+          type: [string, 'null']
           format: date
         low_balance:
           type: boolean
@@ -425,7 +426,9 @@ components:
       description: |
         401: `invalid_api_key`, `api_key_revoked`.
         402: `insufficient_credits`, `sender_credits_empty`, `plan_lapsed`.
-        403: `sender_not_allowed`, `account_suspended`, `scope_missing`.
+        403: `sender_not_allowed`, `account_suspended`, `scope_missing`, `module_disabled`.
+        404: `not_found`.
+        405: `method_not_allowed`.
         409: `blackout_period`, `idempotency_conflict`.
         422: `invalid_number`, `sender_not_approved`, `message_too_long`, `validation_failed`.
         429: `rate_limited`.
@@ -439,6 +442,9 @@ components:
         - sender_not_allowed
         - account_suspended
         - scope_missing
+        - module_disabled
+        - not_found
+        - method_not_allowed
         - blackout_period
         - idempotency_conflict
         - invalid_number
@@ -483,7 +489,7 @@ components:
           example:
             error: { code: insufficient_credits, message: Not enough credits for this send. }
     Forbidden:
-      description: Not permitted (`sender_not_allowed`, `account_suspended`, `scope_missing`).
+      description: Not permitted (`sender_not_allowed`, `account_suspended`, `scope_missing`, `module_disabled`).
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
@@ -494,7 +500,7 @@ components:
           example:
             error: { code: sender_not_allowed, message: This sender name is not allowed for your account. }
     NotFound:
-      description: Unknown send id. Not listed in contract section 3.7; the body still uses the standard error shape.
+      description: Unknown send id (`not_found`). Not listed in contract section 3.7; the body still uses the standard error shape.
       headers:
         X-Request-Id:
           $ref: '#/components/headers/XRequestId'
