@@ -277,13 +277,14 @@ components:
       in: header
       required: false
       description: |
-        UUID. Required for the official client library, optional for raw API users.
+        String of 1 to 255 characters (a UUID is recommended). Sent by the official client library, optional for raw API users.
         The portal stores `(api_key_id, Idempotency-Key)` with a hash of the body for 24 hours.
         Same key and same body returns the original response with no new send and no new charge.
         Same key and a different body returns `409 idempotency_conflict`.
       schema:
         type: string
-        format: uuid
+        minLength: 1
+        maxLength: 255
   schemas:
     SendRequest:
       type: object

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ItsStarter\Sms;
 
+use Closure;
 use DateTimeInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -28,6 +29,7 @@ use ItsStarter\Sms\Exceptions\ServerException;
 use ItsStarter\Sms\Exceptions\ValidationException;
 use ItsStarter\Sms\Support\PhoneNumber;
 use ItsStarter\Sms\Support\Segments;
+use LogicException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -49,21 +51,43 @@ final class Client
 
     private const WARN_SEGMENTS = 6;
 
+    /** The API key sits in a closure so var_export() and similar dumps cannot print it. */
+    private readonly Closure $apiKey;
+
     public function __construct(
         private readonly Factory $http,
-        private readonly ?string $apiKey,
+        ?string $apiKey,
         private readonly string $baseUrl = 'https://sms.itstarter.cc/api/v1',
         private readonly int $timeout = 15,
         private readonly int $maxRetries = 2,
         private readonly ?string $defaultSender = null,
         private readonly ?LoggerInterface $logger = null,
-    ) {}
+    ) {
+        $this->apiKey = fn (): ?string => $apiKey;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        return ['apiKey' => '***', 'baseUrl' => $this->baseUrl, 'timeout' => $this->timeout, 'maxRetries' => $this->maxRetries];
+    }
+
+    public function __serialize(): array
+    {
+        throw new LogicException('ItsSms Client cannot be serialised');
+    }
 
     /**
      * Send a message. Numbers are normalised, de-duplicated and validated locally first.
      *
      * Returns one SendResult, or a list of them when more than 1,000 numbers
      * were split into several sequential requests.
+     *
+     * $idempotencyKey makes your own retries safe: it is sent as is for one batch, or as
+     * "{key}:{batch index}" for several. Without it each batch gets a random UUID.
+     * If a later batch fails, the thrown exception carries the earlier results in $sentResults.
      *
      * @param  string|list<string>  $to
      * @return SendResult|list<SendResult>
@@ -75,6 +99,7 @@ final class Client
         string $type = 'transactional',
         ?string $reference = null,
         DateTimeInterface|string|null $scheduleAt = null,
+        ?string $idempotencyKey = null,
     ): SendResult|array {
         $numbers = $this->normalizeRecipients($to);
         $sender ??= $this->defaultSender;
@@ -101,10 +126,24 @@ final class Client
 
         $results = [];
 
-        foreach (array_chunk($numbers, self::MAX_BATCH) as $batch) {
-            $data = $this->request('POST', '/sms/send', ['to' => $batch] + $payload, [
-                'Idempotency-Key' => (string) Str::uuid(),
-            ]);
+        $batches = array_chunk($numbers, self::MAX_BATCH);
+
+        foreach ($batches as $i => $batch) {
+            $key = $idempotencyKey === null
+                ? (string) Str::uuid()
+                : (count($batches) === 1 ? $idempotencyKey : "{$idempotencyKey}:{$i}");
+
+            if (strlen($key) < 1 || strlen($key) > 255) {
+                throw new ValidationException('The idempotency key must be 1 to 255 characters.');
+            }
+
+            try {
+                $data = $this->request('POST', '/sms/send', ['to' => $batch] + $payload, ['Idempotency-Key' => $key]);
+            } catch (ItsSmsException $e) {
+                $e->sentResults = $results;
+
+                throw $e;
+            }
 
             $results[] = SendResult::fromArray($data);
         }
@@ -198,18 +237,21 @@ final class Client
             ->withHeaders($headers + ['User-Agent' => 'itssms-laravel/'.self::VERSION])
             ->acceptJson()
             ->asJson()
-            ->timeout($this->timeout);
+            ->timeout($this->timeout)
+            ->withoutRedirecting();
     }
 
     private function resolveApiKey(): string
     {
-        if ($this->apiKey === null || $this->apiKey === '') {
+        $key = ($this->apiKey)();
+
+        if ($key === null || $key === '') {
             throw new ConfigurationException(
                 'No ITS SMS API key configured. Set ITSSMS_API_KEY or the "api_key" option in config/itssms.php.',
             );
         }
 
-        return $this->apiKey;
+        return $key;
     }
 
     private function isRetryable(ItsSmsException $e): bool
@@ -273,6 +315,7 @@ final class Client
             $status === 422 => 'validation_failed',
             $status === 429 => 'rate_limited',
             $status >= 500 => 'server_error',
+            $status >= 300 && $status < 400 => 'unexpected_redirect',
             default => 'http_error',
         };
     }

@@ -517,3 +517,65 @@ it('works with a container-built factory and trailing-slash base url', function 
     expect($client->balance()->credits)->toBe(1);
     Http::assertSent(fn (Request $r) => $r->url() === 'https://sms.example.test/api/v1/balance');
 });
+
+it('hides the api key from dumps and refuses serialisation', function () {
+    $client = makeClient();
+
+    expect(print_r($client, true))->not->toContain(TEST_KEY)
+        ->and(@var_export($client, true))->not->toContain(TEST_KEY)
+        ->and(fn () => serialize($client))->toThrow(LogicException::class, 'ItsSms Client cannot be serialised');
+});
+
+it('reuses a caller idempotency key across two send calls', function () {
+    Http::fake(['*' => Http::response(sendOk())]);
+
+    makeClient()->send('0771234567', 'Hi', idempotencyKey: 'order-1042');
+    makeClient()->send('0771234567', 'Hi', idempotencyKey: 'order-1042');
+
+    $recorded = Http::recorded();
+    expect($recorded[0][0]->header('Idempotency-Key')[0])->toBe('order-1042')
+        ->and($recorded[1][0]->header('Idempotency-Key')[0])->toBe('order-1042');
+});
+
+it('suffixes a caller idempotency key per batch', function () {
+    Http::fake(['*' => Http::response(sendOk())]);
+
+    $numbers = array_map(fn (int $i) => '947'.str_pad((string) $i, 8, '0', STR_PAD_LEFT), range(1, 1001));
+    makeClient()->send($numbers, 'Hi', idempotencyKey: 'bulk');
+
+    $recorded = Http::recorded();
+    expect($recorded[0][0]->header('Idempotency-Key')[0])->toBe('bulk:0')
+        ->and($recorded[1][0]->header('Idempotency-Key')[0])->toBe('bulk:1');
+});
+
+it('rejects an idempotency key over 255 characters', function () {
+    Http::fake();
+
+    makeClient()->send('0771234567', 'Hi', idempotencyKey: str_repeat('a', 256));
+})->throws(ValidationException::class);
+
+it('exposes the results of earlier batches when a later batch fails', function () {
+    Http::fake(['*' => Http::sequence()->push(sendOk(['id' => 'cmp_a']))->push(errorBody('invalid_api_key'), 401)]);
+
+    $numbers = array_map(fn (int $i) => '947'.str_pad((string) $i, 8, '0', STR_PAD_LEFT), range(1, 1001));
+
+    try {
+        makeClient()->send($numbers, 'Hi');
+        $this->fail('Expected an exception.');
+    } catch (AuthException $e) {
+        expect($e->sentResults)->toHaveCount(1)->and($e->sentResults[0]->id)->toBe('cmp_a');
+    }
+});
+
+it('never follows a redirect', function () {
+    Http::fake(['*' => Http::response('', 302, ['Location' => 'https://evil.example.test/'])]);
+
+    try {
+        makeClient()->balance();
+        $this->fail('Expected an exception.');
+    } catch (ItsSmsException $e) {
+        expect($e->errorCode)->toBe('unexpected_redirect')->and($e->status)->toBe(302);
+    }
+
+    Http::assertSentCount(1);
+});

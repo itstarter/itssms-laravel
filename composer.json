@@ -2,6 +2,12 @@
     "name": "itstarter/sms",
     "description": "Official Laravel client for ITS SMS, the SMS gateway by IT Starter (Pvt) Ltd.",
     "keywords": ["laravel", "sms", "itssms", "sri lanka", "notifications"],
+    "homepage": "https://itstarter.cc",
+    "support": {
+        "email": "info@itstarter.cc",
+        "issues": "https://github.com/itstarter/itssms-laravel/issues",
+        "source": "https://github.com/itstarter/itssms-laravel"
+    },
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -11,6 +17,8 @@
         "php": "^8.3",
         "ext-mbstring": "*",
         "illuminate/http": "^12.0|^13.0",
+        "illuminate/notifications": "^12.0|^13.0",
+        "illuminate/routing": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0",
         "psr/log": "^1.0|^2.0|^3.0"
     },
