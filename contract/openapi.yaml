@@ -1,0 +1,549 @@
+openapi: 3.1.0
+info:
+  title: ITS SMS API
+  version: 1.0.0
+  summary: SMS gateway API by IT Starter (Pvt) Ltd, contract v1.
+  description: |
+    Contract shared by the ITS SMS portal and its client libraries (`itstarter/sms` for Laravel).
+    The portal must implement exactly this. Clients talk only to this API; carrier credentials
+    (Dialog eSMS) never leave the portal.
+
+    **Auth and headers.** `Authorization: Bearer <apiKey>`, `Accept: application/json`,
+    `Content-Type: application/json`, `User-Agent: itssms-laravel/<version>`.
+    Every response carries `X-Request-Id`.
+
+    **Naming.** The term is *Sender Name*: field `sender`, endpoint `/senders`
+    (not `sender_id` / `/sender-ids`).
+
+    **Numbers.** Clients may send any common format, but the package normalises to `94XXXXXXXXX`
+    (11 digits, Sri Lankan mobiles, `947...`). The portal re-validates and converts to the
+    carrier's 9-digit form internally.
+
+    **Credits only.** LKR amounts never appear in the API.
+
+    **Portal-internal note (not part of the client contract, section 3.8 of the plan).**
+    The carrier `transaction_id` is per carrier call attempt, never the campaign id: one campaign
+    may need several carrier calls (1,000 numbers each), and a retry needs a new transaction id
+    (carrier error 104). Nothing here is visible to API clients.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: https://sms.itstarter.cc/api/v1
+    description: Default base URL (configurable; domain to be confirmed before release)
+security:
+  - bearerAuth: []
+tags:
+  - name: SMS
+  - name: Account
+  - name: Webhooks
+paths:
+  /sms/send:
+    post:
+      tags: [SMS]
+      operationId: sendSms
+      summary: Send an SMS to one or more recipients
+      description: |
+        `credits_charged = segments x billable recipients x (1 transactional | 2 promotional)`.
+        Billable means valid and not a duplicate. Duplicate guard: same number and same text
+        within 10 minutes is skipped (status `duplicate`) and never billed.
+
+        Clients with more than 1,000 numbers must split them into sequential requests of 1,000,
+        each with its own `Idempotency-Key`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendRequest'
+            example:
+              to: ['94771234567', '94712345678']
+              message: Your invoice INV-1042 of LKR 4,500 is due on 30 Oct.
+              sender: BillBook
+              type: transactional
+              reference: INV-1042
+      responses:
+        '200':
+          description: Accepted. A replayed idempotent request returns the original response.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResponse'
+              example:
+                id: cmp_01JB8X2K9Q
+                status: queued
+                recipients: 2
+                segments: 1
+                credits_charged: 2
+                credits_remaining: 1498
+                invalid_numbers: []
+                duplicates_skipped: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '5XX':
+          $ref: '#/components/responses/ServerError'
+  /sms/{id}:
+    get:
+      tags: [SMS]
+      operationId: getSmsStatus
+      summary: Delivery status of a send
+      description: |
+        Send statuses: `queued`, `scheduled`, `processing`, `completed`, `cancelled`.
+        Message statuses only move forward (carrier reports can arrive out of order):
+        `queued`, `submitted`, `delivered`, `failed`, `duplicate`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Send id returned by `POST /sms/send`.
+          schema:
+            type: string
+            examples: [cmp_01JB8X2K9Q]
+      responses:
+        '200':
+          description: Send and per-message status.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendStatus'
+              example:
+                id: cmp_01JB8X2K9Q
+                status: completed
+                reference: INV-1042
+                messages:
+                  - to: '94771234567'
+                    status: delivered
+                    delivered_at: '2026-10-30T10:01:12+05:30'
+                  - to: '94712345678'
+                    status: failed
+                    error: number_unreachable
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '5XX':
+          $ref: '#/components/responses/ServerError'
+  /balance:
+    get:
+      tags: [Account]
+      operationId: getBalance
+      summary: Credit balance
+      description: Credits only; LKR never appears in the API.
+      responses:
+        '200':
+          description: Current balance and plan.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+              example:
+                credits: 1498
+                plan: Startup
+                plan_renews_at: '2026-11-27'
+                low_balance: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '5XX':
+          $ref: '#/components/responses/ServerError'
+  /senders:
+    get:
+      tags: [Account]
+      operationId: listSenders
+      summary: Sender names available to the account
+      responses:
+        '200':
+          description: Sender names.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sender'
+              example:
+                - name: BillBook
+                  type: transactional
+                  status: active
+                  credits: 500
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '5XX':
+          $ref: '#/components/responses/ServerError'
+webhooks:
+  messageEvent:
+    post:
+      tags: [Webhooks]
+      operationId: receiveMessageEvent
+      summary: Delivery event pushed by the portal to the client's webhook URL
+      description: |
+        Events: `message.submitted`, `message.delivered`, `message.failed`.
+
+        Signature: `X-ITS-Signature: sha256=<hex>` where
+        `hex = HMAC-SHA256(webhookSecret, "<timestamp>.<raw body>")` and
+        `X-ITS-Timestamp` is unix seconds. Receivers must compare in constant time and reject
+        timestamps older than 300 seconds.
+
+        The portal retries failed deliveries with backoff, so handlers must be idempotent.
+        Webhook requests are not authenticated with the bearer key.
+      security: []
+      parameters:
+        - name: X-ITS-Timestamp
+          in: header
+          required: true
+          description: Unix seconds at signing time.
+          schema:
+            type: integer
+        - name: X-ITS-Signature
+          in: header
+          required: true
+          description: '`sha256=` followed by the lowercase hex HMAC.'
+          schema:
+            type: string
+            pattern: '^sha256=[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookEvent'
+            example:
+              event: message.delivered
+              id: cmp_01JB8X2K9Q
+              to: '94771234567'
+              status: delivered
+              reference: INV-1042
+              timestamp: '2026-10-30T10:01:12+05:30'
+      responses:
+        '200':
+          description: Acknowledged. Any 2xx stops retries.
+        '401':
+          description: Signature or timestamp rejected by the receiver.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "ITS SMS API key sent as the Authorization header: Bearer <apiKey>."
+  headers:
+    XRequestId:
+      description: Unique id of this request, for support and logging.
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema:
+        type: integer
+        minimum: 0
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        UUID. Required for the official client library, optional for raw API users.
+        The portal stores `(api_key_id, Idempotency-Key)` with a hash of the body for 24 hours.
+        Same key and same body returns the original response with no new send and no new charge.
+        Same key and a different body returns `409 idempotency_conflict`.
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    SendRequest:
+      type: object
+      required: [to, message]
+      properties:
+        to:
+          description: One number or an array of at most 1,000, ideally normalised to `94XXXXXXXXX`.
+          oneOf:
+            - type: string
+            - type: array
+              minItems: 1
+              maxItems: 1000
+              items:
+                type: string
+        message:
+          type: string
+          minLength: 1
+        sender:
+          type: string
+          maxLength: 11
+          pattern: '^[A-Za-z0-9 ._-]{1,11}$'
+          description: Sender Name (max 11 chars; letters, digits, space, dot, dash, underscore). Defaults to the account default.
+        type:
+          type: string
+          enum: [transactional, promotional]
+          default: transactional
+        reference:
+          type: string
+          description: Your own reference, echoed back in status and webhooks.
+        schedule_at:
+          type: string
+          format: date-time
+          description: ISO 8601, at most 7 days ahead.
+    SendResponse:
+      type: object
+      required: [id, status, recipients, segments, credits_charged, credits_remaining]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/SendState'
+        recipients:
+          type: integer
+        segments:
+          type: integer
+        credits_charged:
+          type: integer
+        credits_remaining:
+          type: integer
+        invalid_numbers:
+          type: array
+          items:
+            type: string
+        duplicates_skipped:
+          type: integer
+    SendState:
+      type: string
+      enum: [queued, scheduled, processing, completed, cancelled]
+    MessageState:
+      type: string
+      enum: [queued, submitted, delivered, failed, duplicate]
+    SendStatus:
+      type: object
+      required: [id, status, messages]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/SendState'
+        reference:
+          type: [string, 'null']
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageStatus'
+    MessageStatus:
+      type: object
+      required: [to, status]
+      properties:
+        to:
+          type: string
+        status:
+          $ref: '#/components/schemas/MessageState'
+        delivered_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+          description: Reason code when `status` is `failed`, for example `number_unreachable`.
+    Balance:
+      type: object
+      required: [credits]
+      properties:
+        credits:
+          type: integer
+        plan:
+          type: string
+        plan_renews_at:
+          type: string
+          format: date
+        low_balance:
+          type: boolean
+    Sender:
+      type: object
+      required: [name, type, status]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [transactional, promotional]
+        status:
+          type: string
+          examples: [active]
+        credits:
+          type: [integer, 'null']
+          description: Null when the sender spends from the main Credit Balance.
+    WebhookEvent:
+      type: object
+      required: [event, id, to, status, timestamp]
+      properties:
+        event:
+          type: string
+          enum: [message.submitted, message.delivered, message.failed]
+        id:
+          type: string
+        to:
+          type: string
+        status:
+          $ref: '#/components/schemas/MessageState'
+        reference:
+          type: [string, 'null']
+        timestamp:
+          type: string
+          format: date-time
+    ErrorCode:
+      type: string
+      description: |
+        401: `invalid_api_key`, `api_key_revoked`.
+        402: `insufficient_credits`, `sender_credits_empty`, `plan_lapsed`.
+        403: `sender_not_allowed`, `account_suspended`, `scope_missing`.
+        409: `blackout_period`, `idempotency_conflict`.
+        422: `invalid_number`, `sender_not_approved`, `message_too_long`, `validation_failed`.
+        429: `rate_limited`.
+        5xx: `server_error`.
+      enum:
+        - invalid_api_key
+        - api_key_revoked
+        - insufficient_credits
+        - sender_credits_empty
+        - plan_lapsed
+        - sender_not_allowed
+        - account_suspended
+        - scope_missing
+        - blackout_period
+        - idempotency_conflict
+        - invalid_number
+        - sender_not_approved
+        - message_too_long
+        - validation_failed
+        - rate_limited
+        - server_error
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+  responses:
+    Unauthorized:
+      description: Authentication failed (`invalid_api_key`, `api_key_revoked`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: invalid_api_key, message: The API key is not valid. }
+    PaymentRequired:
+      description: Not enough credit (`insufficient_credits`, `sender_credits_empty`, `plan_lapsed`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: insufficient_credits, message: Not enough credits for this send. }
+    Forbidden:
+      description: Not permitted (`sender_not_allowed`, `account_suspended`, `scope_missing`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: sender_not_allowed, message: This sender name is not allowed for your account. }
+    NotFound:
+      description: Unknown send id. Not listed in contract section 3.7; the body still uses the standard error shape.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Conflict (`blackout_period`, `idempotency_conflict`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: idempotency_conflict, message: This Idempotency-Key was already used with a different body. }
+    Unprocessable:
+      description: Validation failed (`invalid_number`, `sender_not_approved`, `message_too_long`, `validation_failed`).
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: invalid_number, message: One or more numbers are not valid mobile numbers. }
+    RateLimited:
+      description: Too many requests. Clients retry after `Retry-After` seconds.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: rate_limited, message: Too many requests. }
+    ServerError:
+      description: Server error (`server_error`). Safe to retry with the same Idempotency-Key.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: { code: server_error, message: Something went wrong on our side. }

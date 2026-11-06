@@ -1,0 +1,55 @@
+{
+    "name": "itstarter/sms",
+    "description": "Official Laravel client for ITS SMS, the SMS gateway by IT Starter (Pvt) Ltd.",
+    "keywords": ["laravel", "sms", "itssms", "sri lanka", "notifications"],
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        { "name": "IT Starter (Pvt) Ltd" }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-mbstring": "*",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "psr/log": "^1.0|^2.0|^3.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.8|^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ItsStarter\\Sms\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ItsStarter\\Sms\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": ["@putenv XDEBUG_MODE=off", "pest"],
+        "test-coverage": ["@putenv XDEBUG_MODE=coverage", "pest --coverage --min=90"],
+        "analyse": "phpstan analyse",
+        "format": "pint"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ItsStarter\\Sms\\SmsServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
