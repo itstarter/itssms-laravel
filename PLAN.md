@@ -24,7 +24,7 @@ portal API is live on its final domain.
 ## 2. Open items
 
 1. ~~GitHub org~~ → `itstarter` (verified 2026-11-06: riyajkm is a member). Repo `itstarter/itssms-laravel`.
-2. Portal domain still undecided. Default base URL `https://sms.itstarter.cc/api/v1`, configurable; change before release if needed.
+2. ~~Portal domain~~ → `sms.itstarter.cc` (decided 2026-11-07). Default base URL `https://sms.itstarter.cc/api/v1`, configurable with `ITSSMS_BASE_URL`.
 3. ~~Versions~~ → PHP ^8.3, Laravel 12 and 13 (Laravel 13.40 current; 13 needs PHP 8.3; PHP 8.2 security support ends Dec 2026).
 4. ~~Packagist name~~ → `itstarter/sms` is free (verified 2026-11-06).
 
