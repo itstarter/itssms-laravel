@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Package scaffold, service provider and `config/itssms.php`.
+- Package scaffold, service provider and `config/itssms.php`, with the default base URL `https://my.itstarter.cc/api/v1`.
 - API contract v1 in `contract/openapi.yaml`.
 - `PhoneNumber` and `Segments` helpers.
 - HTTP `Client` with retries, idempotency keys, batching, local validation and typed exceptions.
