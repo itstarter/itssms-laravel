@@ -207,7 +207,7 @@ class SmsManager
         return [
             'api_key' => $this->text($source['api_key'] ?? null),
             'sender' => $this->text($source['sender'] ?? null),
-            'base_url' => $this->text($baseUrl) ?? 'https://sms.itstarter.cc/api/v1',
+            'base_url' => $this->text($baseUrl) ?? 'https://my.itstarter.cc/api/v1',
             'timeout' => is_numeric($timeout) ? (int) $timeout : 15,
             'max_retries' => is_numeric($retries) ? (int) $retries : 2,
         ];

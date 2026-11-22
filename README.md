@@ -43,7 +43,7 @@ ITSSMS_API_KEY=your-api-key
 ITSSMS_SENDER=BillBook
 ITSSMS_WEBHOOK_SECRET=your-webhook-secret
 # Only if your portal runs on another domain:
-# ITSSMS_BASE_URL=https://sms.itstarter.cc/api/v1
+# ITSSMS_BASE_URL=https://my.itstarter.cc/api/v1
 ```
 
 `config/itssms.php`:
@@ -52,7 +52,7 @@ ITSSMS_WEBHOOK_SECRET=your-webhook-secret
 return [
     'api_key' => env('ITSSMS_API_KEY'),
     'sender' => env('ITSSMS_SENDER'),            // default Sender Name
-    'base_url' => env('ITSSMS_BASE_URL', 'https://sms.itstarter.cc/api/v1'),
+    'base_url' => env('ITSSMS_BASE_URL', 'https://my.itstarter.cc/api/v1'),
     'timeout' => 15,                              // seconds
     'max_retries' => 2,                           // network errors, 429 and 5xx only
     'webhook' => [

@@ -3,7 +3,7 @@
 return [
     'api_key' => env('ITSSMS_API_KEY'),
     'sender' => env('ITSSMS_SENDER'),
-    'base_url' => env('ITSSMS_BASE_URL', 'https://sms.itstarter.cc/api/v1'),
+    'base_url' => env('ITSSMS_BASE_URL', 'https://my.itstarter.cc/api/v1'),
     'timeout' => 15,
     'max_retries' => 2,
     'webhook' => [

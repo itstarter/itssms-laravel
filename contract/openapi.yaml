@@ -29,7 +29,7 @@ info:
     name: MIT
     identifier: MIT
 servers:
-  - url: https://sms.itstarter.cc/api/v1
+  - url: https://my.itstarter.cc/api/v1
     description: Default base URL (configurable; domain to be confirmed before release)
 security:
   - bearerAuth: []

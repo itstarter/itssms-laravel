@@ -57,7 +57,7 @@ final class Client
     public function __construct(
         private readonly Factory $http,
         ?string $apiKey,
-        private readonly string $baseUrl = 'https://sms.itstarter.cc/api/v1',
+        private readonly string $baseUrl = 'https://my.itstarter.cc/api/v1',
         private readonly int $timeout = 15,
         private readonly int $maxRetries = 2,
         private readonly ?string $defaultSender = null,
