@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
+First release.
+
 ### Added
 - Package scaffold, service provider and `config/itssms.php`, with the default base URL `https://my.itstarter.cc/api/v1`.
 - API contract v1 in `contract/openapi.yaml`.
@@ -28,3 +32,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - `SmsManager` no longer caches clients, so runtime config changes (multi-tenant, Octane) take effect.
+
+[Unreleased]: https://github.com/itstarter/itssms-laravel/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/itstarter/itssms-laravel/releases/tag/v0.1.0
